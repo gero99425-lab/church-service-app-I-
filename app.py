@@ -2,9 +2,13 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import date
+from streamlit_cookies_controller import CookieController
 
 # إعداد الصفحة
 st.set_page_config(page_title="نظام تحضير الخدمة", page_icon="⛪")
+
+# تشغيل وحدة التحكم في الكوكيز الخاصة بمتصفح المستخدم
+controller = CookieController()
 
 # --- ملفات البيانات ---
 users_file = "users.csv"
@@ -19,13 +23,18 @@ if not os.path.exists(data_file):
     df_empty = pd.DataFrame(columns=["التاريخ", "اسم الخادم", "الموضوع", "الآية"])
     df_empty.to_csv(data_file, index=False, encoding='utf-8-sig')
 
-# --- التهيئة لمتغيرات الجلسة لكل مستخدم على حدة ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "username" not in st.session_state:
-    st.session_state.username = ""
+# --- التحقق من حالة الدخول عبر كوكيز المتصفح الخاصة بالمستخدم فقط ---
+cookie_user = controller.get("servant_logged_user")
 
-# --- شاشة تسجيل الدخول (لو مش مسجل) ---
+if "logged_in" not in st.session_state:
+    if cookie_user:
+        st.session_state.logged_in = True
+        st.session_state.username = cookie_user
+    else:
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+
+# --- شاشة تسجيل الدخول ---
 if not st.session_state.logged_in:
     st.title("🔐 تسجيل الدخول - نظام الخدمة الكنسية")
     
@@ -36,14 +45,19 @@ if not st.session_state.logged_in:
     
     with col_login:
         if st.button("دخول", use_container_width=True):
-            df_users = pd.read_csv(users_file)
-            user_row = df_users[(df_users["Username"] == input_user) & (df_users["Password"] == input_pass)]
-            if not user_row.empty:
-                st.session_state.logged_in = True
-                st.session_state.username = input_user
-                st.rerun()
+            if input_user and input_pass:
+                df_users = pd.read_csv(users_file)
+                user_row = df_users[(df_users["Username"] == input_user) & (df_users["Password"] == input_pass)]
+                if not user_row.empty:
+                    st.session_state.logged_in = True
+                    st.session_state.username = input_user
+                    # حفظ اسم المستخدم في كوكي متصفح هذا المستخدم فقط لمدة أسبوع
+                    controller.set("servant_logged_user", input_user, max_age=7*86400)
+                    st.rerun()
+                else:
+                    st.error("اسم المستخدم أو كلمة المرور غير صحيحة!")
             else:
-                st.error("اسم المستخدم أو كلمة المرور غير صحيحة!")
+                st.warning("من فضلك ادخل اسم المستخدم وكلمة المرور.")
                 
     with col_signup:
         if st.button("إنشاء حساب جديد", use_container_width=True):
@@ -55,16 +69,17 @@ if not st.session_state.logged_in:
                     new_user = {"Username": input_user, "Password": input_pass}
                     df_users = pd.concat([df_users, pd.DataFrame([new_user])], ignore_index=True)
                     df_users.to_csv(users_file, index=False, encoding='utf-8-sig')
-                    st.success("تم إنشاء الحساب! اضغط دخول الآن.")
+                    st.success("تم إنشاء الحساب بنجاح! اضغط دخول الآن.")
             else:
-                st.warning("اكتب اسمك والباسورد فوق الأول.")
+                st.warning("اكتب اسمك والباسورد عشان تعمل حساب.")
 
-# --- التطبيق الأساسي (خاص بالمستخدم الحالي بس) ---
+# --- التطبيق الأساسي (بعد تسجيل الدخول) ---
 else:
     st.sidebar.success(f"مرحباً بك: {st.session_state.username}")
     
-    # زر تسجيل الخروج
+    # زر تسجيل الخروج (يحذف الكوكي الخاصة بالمتصفح فوراً)
     if st.sidebar.button("تسجيل خروج"):
+        controller.remove("servant_logged_user")
         st.session_state.logged_in = False
         st.session_state.username = ""
         st.rerun()
