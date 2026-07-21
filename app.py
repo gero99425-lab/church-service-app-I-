@@ -9,7 +9,6 @@ st.set_page_config(page_title="نظام تحضير الخدمة", page_icon="⛪
 # --- ملفات البيانات ---
 users_file = "users.csv"
 data_file = "data.csv"
-session_file = "session.txt"  # ملف صغير لحفظ اسم المستخدم على الجهاز
 
 # 1. إنشاء الملفات لو مش موجودة
 if not os.path.exists(users_file):
@@ -20,18 +19,11 @@ if not os.path.exists(data_file):
     df_empty = pd.DataFrame(columns=["التاريخ", "اسم الخادم", "الموضوع", "الآية"])
     df_empty.to_csv(data_file, index=False, encoding='utf-8-sig')
 
-# --- التحقق التلقائي من الملف (عشان ما ينسكش أبداً) ---
+# --- التهيئة لمتغيرات الجلسة لكل مستخدم على حدة ---
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 if "username" not in st.session_state:
-    if os.path.exists(session_file):
-        with open(session_file, "r", encoding="utf-8") as f:
-            saved_user = f.read().strip()
-            if saved_user:
-                st.session_state.username = saved_user
-                st.session_state.logged_in = True
-            else:
-                st.session_state.logged_in = False
-    else:
-        st.session_state.logged_in = False
+    st.session_state.username = ""
 
 # --- شاشة تسجيل الدخول (لو مش مسجل) ---
 if not st.session_state.logged_in:
@@ -49,9 +41,6 @@ if not st.session_state.logged_in:
             if not user_row.empty:
                 st.session_state.logged_in = True
                 st.session_state.username = input_user
-                # حفظ اسم المستخدم في الملف عشان يفضل فاكره دايماً
-                with open(session_file, "w", encoding="utf-8") as f:
-                    f.write(input_user)
                 st.rerun()
             else:
                 st.error("اسم المستخدم أو كلمة المرور غير صحيحة!")
@@ -70,16 +59,14 @@ if not st.session_state.logged_in:
             else:
                 st.warning("اكتب اسمك والباسورد فوق الأول.")
 
-# --- التطبيق الأساسي (بيفتح فوراً ومش هيطلب منك دخول تاني) ---
+# --- التطبيق الأساسي (خاص بالمستخدم الحالي بس) ---
 else:
     st.sidebar.success(f"مرحباً بك: {st.session_state.username}")
     
-    # زر تسجيل الخروج (لو حد حب يغير الحساب بيمسح ملف الجلسة)
+    # زر تسجيل الخروج
     if st.sidebar.button("تسجيل خروج"):
         st.session_state.logged_in = False
         st.session_state.username = ""
-        if os.path.exists(session_file):
-            os.remove(session_file) # مسح الملف عشان يرجع يطلب تسجيل دخول من جديد
         st.rerun()
 
     st.title("⛪ نظام إدارة وتحضير الخدمة الكنسية")
